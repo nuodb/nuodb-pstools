@@ -1,0 +1,27 @@
+# This file is in POSIX -*-shell-script-*- format.
+#
+# Copy this sample to /etc/nuodb/jvm-options in a package installation,
+# or $NUODB_HOME/var/etc/jvm-options in a local installation,
+# and edit to taste.
+
+
+# Default options
+# - OOM handling
+# NUODB_JAVA_OPTS="-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=$NUODB_RUNDIR"
+
+# Options passed to java when running "service nuoagent start"
+#NUODB_AGENT_JAVA_OPTS=$NUODB_JAVA_OPTS
+NUODB_AGENT_JAVA_OPTS="-Dcom.sun.management.jmxremote
+ -Dcom.sun.management.jmxremote.ssl=false
+ -Dcom.sun.management.jmxremote.port=19999
+ -Dcom.sun.management.jmxremote.authenticate=false
+ -DpropertyProvider=com.nuodb.agent.plugin.PasswordProvider"
+
+# Options passed to java when running "service nuowebconsole start"
+#NUODB_WEBCONSOLE_JAVA_OPTS=
+
+# Options passed to java when running "service nuorestsvc start"
+#NUODB_RESTSVC_JAVA_OPTS=
+
+# Options passed to java when running "nuodbmgr"
+#NUODB_MANAGER_JAVA_OPTS=

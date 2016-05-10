@@ -1,0 +1,64 @@
+# Password Service
+
+This project contains the a simple PasswordProvider to allow an
+encrypted password to be stored in ${NUODB_HOME|/etc/default.properties.
+
+## Description
+
+The base class com.nuodb.plugin.agent.PasswordService can be called to
+encrypt / decrypt a password.   A runnable jar is built with this
+class as the main class.
+
+%java -jar pwdservice.jar [--decrypt] password
+
+When encrypting a password two lines will be printed.
+
+NUODB_PASSKEY = xxxxxxxx
+domainPassword = XXXXXXXX
+
+domainPassword is the encrypted password this should be put into a
+file named ~nuodb/.nuodb.key.   Or you can use the environment variable
+NUODB_PASSKEY instead.  The environment variable will override the key
+file when decrypting.   If you have either of these set when
+encrypting the password (java -jar pwdservice.jar password) then the
+NUODB_PASSKEY will not be displayed.
+
+After creating the encrypted password, use this password for the
+value of domainPassword in the $NUODB_HOME/etc/defaults.properties
+file.
+
+The --decrypt option is used to decrypt an encrypted password string
+it is provided so that a shell program could call it instead of
+hardcoding a clear text password in the shell script.
+
+e.g.:
+
+PWD=$(java -jar $NUODB_HOME/plugins/agent/pwdservice --decrypt \
+	   $(grep domainPassword $NUODB_HOME/etc/default.properties | \
+  	     grep -v \# | gawk '{ print $NF; }'))
+
+The file ~/.nuodb.key should not have world read permissions.  These
+scripts will then only work if invoked by the correct user.  Requires
+the user to have HOME environment variable set.
+
+PasswordProvider
+---------------
+
+In order to use the encrypted password.   You will specify the
+encrypted password as the domainPassword value as mentioned before.
+You then need to make sure either $HOME/.nuodb.key contains the key or
+that environment varialbe NUODB_PASSKEY is set to the key when you
+start nuoagent or nuorestsvc.
+
+You also must define the PasswordProvider in the
+/etc/nuodb/jvm-options.
+
+NUODB_AGENT_JAVA_OPTS=-DpropertyProvider=com.nuodb.agent.plugin.PasswordProvider
+
+Cavaets
+-------
+
+The current implement requires AES encryption to be available from the
+JVM.  Java 1.7 states that all java platforms must support DES.  So it
+is possible that the current implement will not work on all java
+platforms.

@@ -1,0 +1,50 @@
+This directory contains code to define a balancer which can be used to put a broker 
+in passive mode.  By passive we mean that any SQL client connections will be rejected.
+
+compile and package into a runnable jar (ActivePassive.jar).  Where the runnable jar
+main class is:  com.nuodb.activepassive.Keeper
+
+
+The jar servers two purposes:
+   - defines the plugin that gets installed into the broker
+   - contains the program to switch between active / passive
+  
+  
+Installing in broker:
+
+Follow these steps to installing the balancer in the broker:
+
+1) copy ActivePassive.jar to /opt/nuodb/plugin/agent/ActivePassive.jar
+
+2) modify default.properties to include the balancer
+
+balancer = com.nuodb.activepassive.Gate,ChainableTagBalancer,ChainableRegionBalancer
+
+3) modify /etc/nuodb/jvm-options to allow jmx remote management
+
+NUODB_AGENT_JAVA_OPTS="-Dcom.sun.management.jmxremote
+ -Dcom.sun.management.jmxremote.ssl=false
+ -Dcom.sun.management.jmxremote.port=19999
+ -Dcom.sun.management.jmxremote.authenticate=false"
+ 
+4) restart nuoagent
+
+service nuoagent restart
+
+
+Once the broker is running with the balancer in place.   You can then make a broker passive by executing the jar.
+
+java -jar ActivePassive.jar HOST[:PORT] [--active|--passive|--status]
+
+HOST = broker host name or ip
+PORT = port used for remote jmx management (default is 19999)
+
+option 2nd argument:
+  --active  = make broker active if it is not active  (allow SQL connections)
+  --passive = make broker passive if it is not active (don't allow SQL connections)
+  --status  = displays current status (active or passive)
+  
+if no 2nd argument, then an active broker will be made inactive and an inactive broker will be made active.
+
+
+
