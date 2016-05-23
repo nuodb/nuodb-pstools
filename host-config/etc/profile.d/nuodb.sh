@@ -118,16 +118,18 @@ function nuosql() {
 
     if [ $# -eq 0 ] ; then 
        test $verbose -eq 1 && echo nuosql "${args[@]}"
-      ${TIMEIT} ${NUODB_HOME}/bin/nuosql "${args[@]}"
-       [ -e ${TMPDIR+x} ] && rm -rf ${TMPDIR}
-       return
+       ${TIMEIT} ${NUODB_HOME}/bin/nuosql "${args[@]}"
+       local RC=$?
+       [ ! -z ${TMPDIR} ] && [ -e ${TMPDIR} ] && rm -rf ${TMPDIR}
+       return ${RC}
     fi
     local last="${@:$#}"
     if [ "${last#* }" = "${last}" ]; then
         test $verbose -eq 1 && echo "nuosql ${args[@]} ${@:1:$#} "
   	${TIMEIT} ${NUODB_HOME}/bin/nuosql "${args[@]}" "${@:1:$#}"
-        [ -e ${TMPDIR+x} ] && rm -rf ${TMPDIR}
-        return
+	local RC=$?
+	[ ! -z ${TMPDIR} ] && [ -e ${TMPDIR} ] && rm -rf ${TMPDIR}
+        return ${RC}
     fi
     local -a rest
     rest=( "${@:1:$# - 1}" )
@@ -139,7 +141,8 @@ function nuosql() {
        ${TIMEIT} ${NUODB_HOME}/bin/nuoloader "${args[@]}" "${rest[@]}" --export "${last}" --to ,titles
     fi
     local RC=$?
-    [ -e ${TMPDIR+x} ] && rm -rf ${TMPDIR}
+    [ ! -z ${TMPDIR} ] && [ -e ${TMPDIR} ] && rm -rf ${TMPDIR}
+    return ${RC}
 }
 
 #
@@ -379,7 +382,8 @@ function __nuodb__getpass()
   local key=${NUODB_PASSKEY:-$([ -r $(eval echo ~$(whoami))/.nuodb.key ] && cat $(eval echo ~$(whoami))/.nuodb.key)}
 
   if [ "${key}x" != "x" ] ; then
-    pass=$(NUODB_PASSKEY=${key} java -jar "${home}/plugin/agent/password-provider-1.0-SNAPSHOT.jar" --decrypt "${password}" 2> /dev/null)
+      pass=$(NUODB_PASSKEY=${key} java -jar "${home}/plugin/agent/password-provider-1.0-SNAPSHOT.jar" --decrypt "${password}" 2> /dev/null)
+      [ $? -ne 0 ] && pass=$1
   fi
   echo ${pass}
 }
