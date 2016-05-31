@@ -16,14 +16,14 @@
 The Password Provider allows you to encrypt the domainPassword value
 in /opt/nuodb/etc/default.properties.  The source code for the
 PasswordProvider is in the [src/main/java/com/nuodb/agent/plugin](src/main/java/com/nuodb/agent/plugin).
-A prebuilt jar of the jar is located in [../../opt/nuodb/plugin/agent/password-provider-1.0-SNAPSHOT.jar](../../opt/nuodb/plugin/agent).
+A prebuilt jar of the jar is located in [../../opt/nuodb/agent/plugin/password-provider-1.0-SNAPSHOT.jar](../../opt/nuodb/agent/plugin).
 
 Using this jar you can generate an encrypted password and encryption
 key allowing you to store the encrypted password in default.properties
 provided:
 
 1. The encryption key is stored in ~nuodb/.nuodb.key
-2. password-provider-1.0-SNAPSHOT.jar is installed in /opt/nuodb/plugin/agent
+2. password-provider-1.0-SNAPSHOT.jar is installed in /opt/nuodb/agent/plugin
 3. NUODB_AGENT_JVM_OPTS in /etc/nuodb/jvm-options includes
 ```
 -DpropertyProvider=com.nuodb.agent.plugin.PasswordProvider 
@@ -74,7 +74,7 @@ domainPassword = M0hTP2IhTDSQGmHFY6gE0Q==
 domain = domain
 broker = true
 portRange = 48005
-balancer = com.nuodb.plugin.agent.activepassive.Gate,RoundRobinBalancer
+balancer = com.nuodb.agent.plugin.activepassive.Gate,RoundRobinBalancer
 singleHostDbRestart = true
 ```
 
@@ -123,7 +123,7 @@ domainPassword = H23YFs+GMkKyN79O7kWaRg==
 domain = domain
 broker = true
 portRange = 48005
-balancer = com.nuodb.plugin.agent.activepassive.Gate,RoundRobinBalancer
+balancer = RegionBalancer
 singleHostDbRestart = true
 ```
 

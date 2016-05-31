@@ -2,7 +2,7 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.nuodb.plugins</groupId>
+    <groupId>com.nuodb.agent.plugins</groupId>
     <artifactId>active-passive-balancer</artifactId>
     <version>1.0-SNAPSHOT</version>
     <packaging>jar</packaging>
@@ -48,7 +48,7 @@
                         <addMavenDescriptor>false</addMavenDescriptor>
                         <manifest>
                             <addClasspath>true</addClasspath>
-                            <mainClass>com.nuodb.plugin.agent.activepassive.Keeper</mainClass>
+                            <mainClass>com.nuodb.agent.plugin.activepassive.Keeper</mainClass>
                         </manifest>
                     </archive>
                 </configuration>
