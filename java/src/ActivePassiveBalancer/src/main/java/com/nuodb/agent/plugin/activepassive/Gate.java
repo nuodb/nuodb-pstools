@@ -1,6 +1,6 @@
 /* Copyright 2016 NuoDB, Inc. All rights reserved */
 
-package com.nuodb.plugin.agent.activepassive;
+package com.nuodb.agent.plugin.activepassive;
 
 import com.nuodb.agent.PropertiesContainer;
 
