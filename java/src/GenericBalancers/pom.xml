@@ -3,10 +3,10 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.nuodb.agent.plugins</groupId>
-    <artifactId>active-passive-balancer</artifactId>
+    <artifactId>generic-balancers</artifactId>
     <version>1.0-SNAPSHOT</version>
     <packaging>jar</packaging>
-    <name>activepassive</name>
+    <name>generic-balancers</name>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>

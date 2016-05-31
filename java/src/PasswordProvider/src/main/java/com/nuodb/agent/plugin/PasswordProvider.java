@@ -59,7 +59,6 @@ public class PasswordProvider extends PasswordService implements PropertiesProvi
                 x.printStackTrace();
             }
         }
-        logger.log(Level.INFO, key + "=" + value);
         return value;
     }
 
