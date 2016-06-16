@@ -173,7 +173,12 @@ function nuocmd()
    local TMPPIPE=${TMPDIR}/nuodbmgr
    mkfifo -m 600 ${TMPPIPE}
 
-   ( echo "password=${pass}" > ${TMPPIPE} & ) 2>&1 >/dev/null
+   local PROPERTIES=$(cat <<EOF
+password=${pass}
+$([ -r ~/.nuocmd.properties ] && cat ~/.nuocmd.properties)
+EOF
+)
+   (echo "${PROPERTIES}" > ${TMPPIPE} &) 2>&1 >/dev/null
    if [ $# -eq 0 ]; then
       [[ $verbose -eq 1 ]] && echo nuodbmgr --broker $broker --password $pass --user $user
       ${NUODB_HOME}/bin/nuodbmgr --broker $broker --properties ${TMPPIPE} --user $user
