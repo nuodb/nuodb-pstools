@@ -1,4 +1,15 @@
-: ${NUODB_HOME:=/opt/nuodb}
+#
+# Set of functions to use in bash (zsh seems to work bourne shell and ksh probably not).
+#
+# Three utility files can be used for functions in this script.
+#  ~/.nuodb.properties    -- maps DBNAME to variables for username, password, schema, etc
+#  ~/.nuodbmgr.properties -- setup commands to be every time nuodbmgr is run
+#  ~/.nuodb.key           -- encryption key so passwords in .nuodb.properties aren't in the clear.
+
+function __nuodb__home() {
+    local home=${NUODB_HOME:-/opt/nuodb}
+    echo ${home}
+}
 
 # if we store database parameters in .nuodb.properties file
 function __nuodb__property() {
@@ -19,7 +30,7 @@ function __nuodb__property() {
 # get __nuodb__parameter for script from environment, .nuodb.properties file (based upon DBNAME) or default
 function __nuodb__param()
 {
-  [ -z ${NUODB_VARDIR+x} ] && [ -r ${NUODB_HOME}/etc/nuodb_setup.sh ] && . $NUODB_HOME/etc/nuodb_setup.sh
+  [ -z ${NUODB_VARDIR+x} ] && [ -r $(__nuodb__home)/etc/nuodb_setup.sh ] && . $(__nuodb_home)/etc/nuodb_setup.sh
 
   local dbname=${DBNAME:-LOG}
   DBNAME=${dbname}
@@ -29,7 +40,9 @@ function __nuodb__param()
   [ $1 = dbpass ]          && echo ${DBPASS:-$(__nuodb__getpass $(__nuodb__property $1 dba))}
   [ $1 = dbschema ]        && echo ${DBSCHEMA:-$(__nuodb__property $1 dbo)}
   [ $1 = archive ]         && echo ${ARCHIVE:-${NUODB_VARDIR}/production-archives/${dbname}}
-  [ $1 = broker ]          && echo ${BROKER:-$(__nuodb__property $1 $(hostname) )}
+#  [ $1 = broker ]          && echo ${BROKER:-$(__nuodb__property $1 $(hostname) )}
+  [ $1 = broker ]          && echo ${BROKER:-$(__nuodb__property $1 127.0.0.1 )}
+#  [ $1 = broker ]          && echo ${BROKER:-$(__nuodb__property $1 192.168.123.177 )}
   [ $1 = domain_password ] && echo ${DOMAIN_PASSWORD:-$(__nuodb__getpass $(DBNAME=domain __nuodb__property pass bird))}
   [ $1 = domain_user ]     && echo ${DOMAIN_USER:-$(DBNAME=domain __nuodb__property user domain)}
 }
@@ -72,6 +85,7 @@ function nuosql() {
     local numargs=$#
     local -a iargv
     local verbose=0
+    local titles="titles"
     local TIMEIT=""
     for ((i=1 ; i <= numargs ; i++))
     do
@@ -79,6 +93,8 @@ function nuosql() {
             verbose=1
         elif [ "$1" = "--csv" ]; then
 	    local csv=1
+        elif [ "$1" = "--notitles" ]; then
+	    titles=""
         elif [ "$1" = "--time" ]; then
 	    TIMEIT="time -p"
 	else
@@ -118,7 +134,7 @@ function nuosql() {
 
     if [ $# -eq 0 ] ; then 
        test $verbose -eq 1 && echo nuosql "${args[@]}"
-       ${TIMEIT} ${NUODB_HOME}/bin/nuosql "${args[@]}"
+       ${TIMEIT} $(__nuodb__home)/bin/nuosql "${args[@]}"
        local RC=$?
        [ ! -z ${TMPDIR} ] && [ -e ${TMPDIR} ] && rm -rf ${TMPDIR}
        return ${RC}
@@ -126,7 +142,7 @@ function nuosql() {
     local last="${@:$#}"
     if [ "${last#* }" = "${last}" ]; then
         test $verbose -eq 1 && echo "nuosql ${args[@]} ${@:1:$#} "
-  	${TIMEIT} ${NUODB_HOME}/bin/nuosql "${args[@]}" "${@:1:$#}"
+  	${TIMEIT} $(__nuodb__home)/bin/nuosql "${args[@]}" "${@:1:$#}"
 	local RC=$?
 	[ ! -z ${TMPDIR} ] && [ -e ${TMPDIR} ] && rm -rf ${TMPDIR}
         return ${RC}
@@ -135,62 +151,157 @@ function nuosql() {
     rest=( "${@:1:$# - 1}" )
     if [ -z ${csv+x} ]; then
        test $verbose -eq 1 && echo "nuosql "${args[@]}" --nosemicolon "${rest[@]}" "
-       echo "$last" | ${TIMEIT} ${NUODB_HOME}/bin/nuosql "${args[@]}" --nosemicolon "${rest[@]}"
+       echo "$last" | ${TIMEIT} $(__nuodb__home)/bin/nuosql "${args[@]}" --nosemicolon "${rest[@]}"
     else
-       test $verbose -eq 1 && echo nuoloader "${args[@]}" "${rest[@]}" --export "${last}" --to ,titles
-       ${TIMEIT} ${NUODB_HOME}/bin/nuoloader "${args[@]}" "${rest[@]}" --export "${last}" --to ,titles
+       test $verbose -eq 1 && echo nuoloader "${args[@]}" "${rest[@]}" --export "${last}" --to ,${titles}
+       ${TIMEIT} $(__nuodb__home)/bin/nuoloader "${args[@]}" "${rest[@]}" --export "${last}" --to ,${titles}
     fi
     local RC=$?
     [ ! -z ${TMPDIR} ] && [ -e ${TMPDIR} ] && rm -rf ${TMPDIR}
     return ${RC}
 }
 
+function __nuodb__join_by { local IFS="$1"; shift; echo "$*"; }
+
+#
+# load into current database data from csvfile.
+#
+function nuoload()
+{
+    local file=""
+    local table=""
+    local -a args
+    
+    while (( $# ))
+    do
+	local key=$1
+	shift
+	case $key in
+	    --csv | -c)
+		file=$1
+		shift
+		;;
+	    --table | -t)
+		table=$1
+		shift
+		;;
+	    *)
+		echo $1
+		echo "usage: $0 --csv <file> --table <tablename>"
+		return 1
+		;;
+	esac
+    done
+    [ "$file" = "" ]   && echo "usage: $0 --csv <file> --table <tablename>" && return 1
+    [ "$table" = "" ] && echo "usage: $0 --csv <file> --table <tablename>" && return 1
+
+    local dbname=$(__nuodb__param dbname) 
+    if [ "$dbname" != "" ]
+    then
+	local broker=$(__nuodb__param broker) 
+	[ "$broker" != "" ] && dbname="${dbname}@${broker}" 
+	args=("${dbname}") 
+    fi
+    local dbuser=$(__nuodb__param dbuser) 
+    if [ "$dbuser" != "" ]
+    then
+	args+=("--user" $dbuser) 
+    fi
+    local dbpass=$(__nuodb__param dbpass) 
+    if [ "$dbpass" != "" ]
+    then
+	args+=("--password" $dbpass)
+    fi
+    local dbschema=$(__nuodb__param dbschema) 
+    if [ "$dbschema" != "" ]
+    then
+	args+=("--schema" $dbschema) 
+    fi
+
+    local X=$(head -1 $file |awk -F, '{ print NF; }')
+    local icmd="INSERT INTO $table (\"$(head -1 ${file} | sed 's/,/","/g' | tr -d '\r')\") VALUES ($(__nuodb__join_by , $(printf "? %.0s" $(seq 1 $X))))"
+ 
+    echo nuoloader "${args[@]}" --to "'${icmd}'" 
+    tail -n +2 ${file} | $(__nuodb_home)/bin/nuoloader "${args[@]}" --to "${icmd}" 
+    return $?
+}
+
+
 #
 # call nuodbmgr
 #
-function nuocmd()
-{
-   local broker=$(__nuodb__param broker)
-   local pass=$(__nuodb__param domain_password)
-   local user=$(__nuodb__param domain_user)
-   local verbose=0
-   local -a iargv
-   local numargs=$#
-
-   for ((i=1 ; i <= numargs ; i++))
-   do
-       if [ "$1" = "--verbose" ]; then
-           verbose=1
-       else
-           iargv+=( "$1" )
-       fi
-       shift
-   done
-
-   set -- "${iargv[@]}"
-
-   local TMPDIR=$(mktemp -d)
-   local TMPPIPE=${TMPDIR}/nuodbmgr
-   mkfifo -m 600 ${TMPPIPE}
-
-   local PROPERTIES=$(cat <<EOF
+function nuocmd () {
+    local broker=$(__nuodb__param broker) 
+    local pass=$(__nuodb__param domain_password) 
+    local user=$(__nuodb__param domain_user) 
+    local verbose=0 
+    local -a iargv
+    local numargs=$# 
+    local -a options
+    local opt
+    while (( $# ))
+    do
+        local key=$1
+        shift
+        case $key in
+        --verbose | -v)
+            verbose=1
+            ;;
+        --broker | -b)
+            broker = $1
+            shift ;;
+        --password | -p)
+            pass = $1
+            shift ;;
+        --user | -u)
+            user = $1
+            shift ;;
+        --database | --log)
+            options+=("$key"  "$1")
+            shift ;;
+        --help | --version | noLineEditor)
+            options+=("$key")
+            ;;
+        *)
+            iargv+=("$key") 
+            ;;
+        esac
+    done
+    set -- "${iargv[@]}"
+    local TMPDIR=$(mktemp -d) 
+    local TMPPIPE=${TMPDIR}/nuodbmgr 
+    mkfifo -m 600 ${TMPPIPE}
+    local PROPERTIES=$(cat <<EOF
+$([ -r ~/.nuodbmgr.properties ] && cat ~/.nuodbmgr.properties)
 password=${pass}
-$([ -r ~/.nuocmd.properties ] && cat ~/.nuocmd.properties)
 EOF
-)
-   (echo "${PROPERTIES}" > ${TMPPIPE} &) 2>&1 >/dev/null
-   if [ $# -eq 0 ]; then
-      [[ $verbose -eq 1 ]] && echo nuodbmgr --broker $broker --password $pass --user $user
-      ${NUODB_HOME}/bin/nuodbmgr --broker $broker --properties ${TMPPIPE} --user $user
-   else
-      [[ $verbose -eq 1 ]] && echo nuodbmgr --broker $broker --password $pass --user $user --command \"$*\"
-      ${NUODB_HOME}/bin/nuodbmgr --broker $broker --properties ${TMPPIPE} --user $user --command "$*"
-   fi
-   local RCODE=$?
-   [ -z ${TMPDIR+x} ] || rm -rf ${TMPDIR}
-   return ${RCODE}
+) 
+    (
+        echo "${PROPERTIES}" > ${TMPPIPE} &
+    ) 2>&1 > /dev/null
+    if [ $# -eq 0 ]
+    then
+        [[ $verbose -eq 1 ]] && echo nuodbmgr --broker $broker --password $pass --user $user ${options[@]}
+        $(__nuodb__home)/bin/nuodbmgr --broker $broker --properties ${TMPPIPE} --user $user ${options[@]}
+    else
+        [[ $verbose -eq 1 ]] && echo nuodbmgr --broker $broker --password $pass --user $user  ${options[@]} --command \"$*\"
+        $(__nuodb__home)/bin/nuodbmgr --broker $broker --properties ${TMPPIPE} --user $user  ${options[@]} --command "$*"
+    fi
+    local RCODE=$? 
+    [ -z ${TMPDIR+x} ] || rm -i -rf ${TMPDIR}
+    return ${RCODE}
 }
 
+function nuostartdb() {
+   local pass=$(__nuodb__param dbpass)
+   local user=$(__nuodb__param dbuser)
+   local archive=$(__nuodb__param archive)
+   local init=true
+   [ -e $archive ] && init=false
+   nuocmd "$@" start process sm database $(__nuodb__param dbname)  archive $archive host localhost initialize $init 
+   sleep 2
+   nuocmd "$@" start process te database $(__nuodb__param dbname)  host localhost  options "'--dba-user $user --dba-password $pass'"
+}
 
 function __nuodb__removeblanks() {
   grep -v '^[ \t]*$'
@@ -347,18 +458,164 @@ function nuolist() {
     done
 }
 
+function __nuosql__formatter()
+{
+#    cat - 
+    sql-formatter | sed 's/; /;^/g' | tr '^' '\n'
+}
+
 #
 # dump schema from current database
 #
 function nuoschema()
 {
-    nuodb-migrator schema  \
-	--source.driver=com.nuodb.jdbc.Driver \
-	--source.url=jdbc:com.nuodb://$(__nuodb__param broker)/$(__nuodb__param dbname) \
-	--source.schema=$(__nuodb__param dbschema)  \
-	--source.username=$(__nuodb__param dbuser)  \
-	--source.password=$(__nuodb__param dbpass) #| sql-formatter | sed 's/; /;^/g' | tr '^' '\n'
+    local TMPDIR=$(mktemp -d) 
+    local TMPPIPE=${TMPDIR}/nuoschema
+    mkfifo -m 600 ${TMPPIPE}
+    local PROPERTIES=$(cat <<EOF
+--source.driver=com.nuodb.jdbc.Driver
+--source.url=jdbc:com.nuodb://$(__nuodb__param broker)/$(__nuodb__param dbname)
+--source.schema=$(__nuodb__param dbschema) 
+--source.username=$(__nuodb__param dbuser)
+--source.password=$(__nuodb__param dbpass)
+EOF
+) 
+    (
+        echo "${PROPERTIES}" > ${TMPPIPE} &
+    ) 2>&1 > /dev/null
+    
+    $(__nuodb__home)/bin/nuodb-migrator schema  --config=${TMPPIPE} | __nuosql_formatter
+    [ ! -z ${TMPDIR} ] && [ -e ${TMPDIR} ] && rm -rf ${TMPDIR}
 }
+
+#
+# import data from export
+#
+function nuoimport()
+{
+   local dir=.
+   local dbname=$(__nuodb__param dbname)
+   local dbuser=$(__nuodb__param dbuser)
+   local broker=$(__nuodb__param broker)
+   local dbpass=$(__nuodb__param dbpass)
+   local dbschema=$(__nuodb__param dbschema)
+   local tables='*'
+   local data=true
+   local schema=false
+
+    while (( $# ))
+    do
+        local key=$1
+        shift
+        case $key in
+	    -t|--tables)
+		tables=$1
+		shift
+		;;
+	    -d|--dir)
+	        dir=$1
+		shift
+		;;
+	    -D|--data)
+	        data=$1
+		shift
+		;;
+	    -s|--schema)
+	        schema=$1
+		shift
+		;;
+            -h|*)
+		echo "$0 [-d|--dir dumpdirectory] [-t|--tables tablelist] [-D|--data true|false] [-s|--schema false|true]"
+		return
+                ;;
+        esac
+    done
+
+    if [ -e ${dir}/backup.cat ] ; then
+	local TMPDIR=$(mktemp -d) 
+	local TMPPIPE=${TMPDIR}/nuoschema
+	mkfifo -m 600 ${TMPPIPE}
+	local PROPERTIES=$(cat <<EOF
+--target.username=$(__nuodb__param dbuser)
+--target.password=$(__nuodb__param dbpass)
+--target.driver=com.nuodb.jdbc.Driver
+--target.url=jdbc:com.nuodb://${broker}/${dbname}
+--target.schema=${dbschema} --input.path=${dir}
+--table=${tables} --data=${data} --schema=${schema}
+EOF
+) 
+	(
+            echo "${PROPERTIES}" > ${TMPPIPE} &
+	) 2>&1 > /dev/null
+	$(__nuodb__home)/bin/nuodb-migrator load --config=${TMPPIPE}
+	[ ! -z ${TMPDIR} ] && [ -e ${TMPDIR} ] && rm -rf ${TMPDIR}
+    else
+       echo "${dir} does not have exported data."
+    fi
+}
+
+
+#
+# export data from database to a directory
+#
+function nuoexport()
+{
+   local dir=.
+   local dbname=$(__nuodb__param dbname)
+   local dbuser=$(__nuodb__param dbuser)
+   local broker=$(__nuodb__param broker)
+   local dbpass=$(__nuodb__param dbpass)
+   local dbschema=$(__nuodb__param dbschema)
+   local format=CSV
+   local tables='*'
+
+    while (( $# ))
+    do
+        local key=$1
+        shift
+        case $key in
+            -f|--format)
+		format=$1
+                shift
+                ;;
+	    -t|--tables)
+		tables=$1
+		shift
+		;;
+	    -d|--dir)
+	        dir=$1
+		shift
+		;;
+            -h|*)
+		echo "$0 [-d|--dir dumpdirectory] [-f|--format CSV|BSON|XML] [-t|--tables tablelist]"
+		return
+                ;;
+        esac
+    done
+
+    local TMPDIR=$(mktemp -d) 
+    trap "rm -rf ${TMPDIR}" SIGINT SIGTERM SIGEXIT
+
+    local TMPPIPE=${TMPDIR}/nuoschema
+    mkfifo -m 600 ${TMPPIPE}
+    local PROPERTIES=$(cat <<EOF
+--source.driver=com.nuodb.jdbc.Driver
+--source.url=jdbc:com.nuodb://${broker}/${dbname}
+--source.username=$(__nuodb__param dbuser)
+--source.password=$(__nuodb__param dbpass)
+--source.schema=${dbschema}
+--output.type=${format}
+--output.path=${dir} 
+--threads=10
+EOF
+) 
+    (
+        echo "${PROPERTIES}" > ${TMPPIPE} &
+    ) 2>&1 > /dev/null
+    $(__nuodb__home)/bin/nuodb-migrator dump --table ${tables} --config="${TMPPIPE}"
+    [ ! -z ${TMPDIR} ] && [ -e ${TMPDIR} ] && rm -rf ${TMPDIR}
+}
+
 
 function __nuodb__getown () {
     case $1 in
@@ -373,7 +630,7 @@ function __nuodb__log() {
 }
 
 function nuodbuser() {
-    echo $(__nuodb__getown user "${NUODB_HOME}/jar")
+    echo $(__nuodb__getown user "$(__nuodb__home)/jar")
 }
 
 # decrypts password if it is encrypted
@@ -382,7 +639,7 @@ function nuodbuser() {
 function __nuodb__getpass()
 {
   local password=$1
-  local home=${NUODB_HOME:-/opt/nuodb}
+  local home=$(__nuodb__home)
   local pass=$1
   local key=${NUODB_PASSKEY:-$([ -r $(eval echo ~$(whoami))/.nuodb.key ] && cat $(eval echo ~$(whoami))/.nuodb.key)}
 
@@ -394,3 +651,4 @@ function __nuodb__getpass()
 }
 
 alias nuosummary="nuocmd show domain summary"
+export PATH=$(__nuodb__home)/etc:$PATH
