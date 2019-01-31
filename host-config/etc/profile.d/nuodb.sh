@@ -1,10 +1,59 @@
+#  This file is intended to be sourced into a bash shell, zsh might work also.
+#  There is an accompany file (nuodb.complete.sh) that can be sourced for bash 
+#  shell completion of functions in this file.
 #
-# Set of functions to use in bash (zsh seems to work bourne shell and ksh probably not).
+#  These functions utilize an embedded framework for identifying nuodb parameters
+#  such as:  broker, domain_user, database, user, password, schema.
 #
-# Three utility files can be used for functions in this script.
-#  ~/.nuodb.properties    -- maps DBNAME to variables for username, password, schema, etc
-#  ~/.nuodbmgr.properties -- setup commands to be every time nuodbmgr is run
-#  ~/.nuodb.key           -- encryption key so passwords in .nuodb.properties aren't in the clear.
+#  The top level callable functions are:
+#     nuomgr     - wrapper around nuodbmgr that provides simple command line
+#                  interface.
+#     nuosql     - wrapper around nuosql (and nuoloader) providing a simple
+#                  command line interface for executing single statement.
+#     nuoload    - simple interface for loading a csv file where first row
+#                  includes column names of the table being load.
+#     nuoexport  - simple interface for exporting database/tables via nuodb-migrator
+#     nuoimport  - simple interface for importing an exported data set
+#     nuoschema  - simple interface for dumping in SQL a database schema.  This uses
+#                  nuodb-migrator and currently does not dump functions and procedures.
+#     nuolist    - utility function that executes some simple queries agains system tables
+#                  and formats output.  This is outdated and should be revisited for
+#                  more useful set of commands and outputs.
+#     nuostartdb - a simple means to start a TE/SM locally for a database.
+#
+#  Parameter framework:
+#
+#  A set of parameters (broker, domain_user, domain_password, database, user, password, schema)
+#  commonly passed with nuodb functions can be configured in a user-specific configuration file,
+#  overridden by environment variables or command line options.
+#
+#                    config file        env variable    command option   defaults
+#                    ===============    ============    ===============  ==========
+#   broker           <DBNAME>.broker    BROKER           database@broker   localhost
+#   domain_user      domain.user        DOMAIN_USER      --user            domain 
+#   domain_password  domain.pass        DOMAIN_PASSWORD  --password        bird
+#   database         <DBNAME>.dbname    DBNAME           database@broker   LOG
+#   user             <DBNAME>.dbuser    DBUSER           --user            dba
+#   password         <DBNAME>.dbpass    DBPASS           --password        dba
+#   schema           <DBNAME>.dbschema  DBSCHEMA         --schema          dbo
+#
+#  Passwords:
+#
+#  Where possible these scripts attempt to protect database or domain passwords from prying eyes, if
+#  you specify them in the configuration file ~/.nuodb.properties.  This file should be configured with
+#  400 permissions to prevent others from viewing the file.  Additionally the value stored for the
+#  password could be encrypted with some additional setup.
+#
+#  If the value in the configuration file is overridden by an environment variable.  Then where/when
+#  that variable is set can be accessed (via bash_history, or in ~/.bashrc) and while the program is
+#  running the variable setting is visible in /proc/<pid>/environ.
+#
+#  If the value is overridden by command line argument then it is visible via ps -f and bash_history.
+#
+#  NOTE:  There is no means for the scripts to mask the password when invoking nuoloader.   So when
+#         nuosql --csv '...' or nuoload function is invoked the password will be visible in a ps -def
+#         but, not via bash_history.
+#
 
 function __nuodb__home() {
     local home=${NUODB_HOME:-/opt/nuodb}
@@ -30,7 +79,7 @@ function __nuodb__property() {
 # get __nuodb__parameter for script from environment, .nuodb.properties file (based upon DBNAME) or default
 function __nuodb__param()
 {
-  [ -z ${NUODB_VARDIR+x} ] && [ -r $(__nuodb__home)/etc/nuodb_setup.sh ] && . $(__nuodb_home)/etc/nuodb_setup.sh
+  [ -z ${NUODB_VARDIR+x} ] && [ -r $(__nuodb__home)/etc/nuodb_setup.sh ] && . $(__nuodb__home)/etc/nuodb_setup.sh
 
   local dbname=${DBNAME:-LOG}
   DBNAME=${dbname}
@@ -40,9 +89,7 @@ function __nuodb__param()
   [ $1 = dbpass ]          && echo ${DBPASS:-$(__nuodb__getpass $(__nuodb__property $1 dba))}
   [ $1 = dbschema ]        && echo ${DBSCHEMA:-$(__nuodb__property $1 dbo)}
   [ $1 = archive ]         && echo ${ARCHIVE:-${NUODB_VARDIR}/production-archives/${dbname}}
-#  [ $1 = broker ]          && echo ${BROKER:-$(__nuodb__property $1 $(hostname) )}
   [ $1 = broker ]          && echo ${BROKER:-$(__nuodb__property $1 127.0.0.1 )}
-#  [ $1 = broker ]          && echo ${BROKER:-$(__nuodb__property $1 192.168.123.177 )}
   [ $1 = domain_password ] && echo ${DOMAIN_PASSWORD:-$(__nuodb__getpass $(DBNAME=domain __nuodb__property pass bird))}
   [ $1 = domain_user ]     && echo ${DOMAIN_USER:-$(DBNAME=domain __nuodb__property user domain)}
 }
@@ -222,7 +269,7 @@ function nuoload()
     local icmd="INSERT INTO $table (\"$(head -1 ${file} | sed 's/,/","/g' | tr -d '\r')\") VALUES ($(__nuodb__join_by , $(printf "? %.0s" $(seq 1 $X))))"
  
     echo nuoloader "${args[@]}" --to "'${icmd}'" 
-    tail -n +2 ${file} | $(__nuodb_home)/bin/nuoloader "${args[@]}" --to "${icmd}" 
+    tail -n +2 ${file} | $(__nuodb__home)/bin/nuoloader "${args[@]}" --to "${icmd}" 
     return $?
 }
 
@@ -230,7 +277,7 @@ function nuoload()
 #
 # call nuodbmgr
 #
-function nuocmd () {
+function nuomgr () {
     local broker=$(__nuodb__param broker) 
     local pass=$(__nuodb__param domain_password) 
     local user=$(__nuodb__param domain_user) 
@@ -298,9 +345,9 @@ function nuostartdb() {
    local archive=$(__nuodb__param archive)
    local init=true
    [ -e $archive ] && init=false
-   nuocmd "$@" start process sm database $(__nuodb__param dbname)  archive $archive host localhost initialize $init 
+   nuomgr start process sm database $(__nuodb__param dbname)  archive $archive host localhost initialize $init 
    sleep 2
-   nuocmd "$@" start process te database $(__nuodb__param dbname)  host localhost  options "'--dba-user $user --dba-password $pass'"
+   nuomgr start process te database $(__nuodb__param dbname)  host localhost  options "'--dba-user $user --dba-password $pass'"
 }
 
 function __nuodb__removeblanks() {
@@ -460,8 +507,8 @@ function nuolist() {
 
 function __nuosql__formatter()
 {
-#    cat - 
-    sql-formatter | sed 's/; /;^/g' | tr '^' '\n'
+   cat -
+#    sql-formatter | sed 's/; /;^/g' | tr '^' '\n'
 }
 
 #
@@ -472,19 +519,62 @@ function nuoschema()
     local TMPDIR=$(mktemp -d) 
     local TMPPIPE=${TMPDIR}/nuoschema
     mkfifo -m 600 ${TMPPIPE}
+
+    local dbname=$(__nuodb__param dbname)
+    local dbuser=$(__nuodb__param dbuser)
+    local broker=$(__nuodb__param broker)
+    local dbpass=$(__nuodb__param dbpass)
+    local dbschema=$(__nuodb__param dbschema)
+
+    local numargs=$# 
+    local _help=0
+    while (( $# ))
+    do
+        local key=$1
+        shift
+        case $key in
+        --broker | -b)
+            broker=$1
+            shift ;;
+        --password | -p)
+            dbpass=$1
+            shift ;;
+        --user | -u)
+            dbuser=$1
+            shift ;;
+        --database | -d)
+            dbname=$1
+            shift ;;
+        --schema | -s)
+            dbschema=$1
+            shift ;;
+	--help | -h)
+	    _help=1
+	    ;;
+        *)
+	    _help=1
+            ;;
+        esac
+    done
+
+    if [ "${_help}" = "1" ]; then
+	echo "usage: nuoschema [--broker|-b broker] [--password|-p password] [--user|-u user] [--database|-d dbname] [--schema|-s schema] [--help|-h]"
+	return
+    fi
+
     local PROPERTIES=$(cat <<EOF
 --source.driver=com.nuodb.jdbc.Driver
---source.url=jdbc:com.nuodb://$(__nuodb__param broker)/$(__nuodb__param dbname)
---source.schema=$(__nuodb__param dbschema) 
---source.username=$(__nuodb__param dbuser)
---source.password=$(__nuodb__param dbpass)
+--source.url=jdbc:com.nuodb://${broker}/${dbname}
+--source.schema=${dbschema}
+--source.username=${dbuser}
+--source.password=${dbpass}
 EOF
 ) 
     (
         echo "${PROPERTIES}" > ${TMPPIPE} &
     ) 2>&1 > /dev/null
     
-    $(__nuodb__home)/bin/nuodb-migrator schema  --config=${TMPPIPE} | __nuosql_formatter
+    $(__nuodb__home)/bin/nuodb-migrator schema  --config=${TMPPIPE} | __nuosql__formatter
     [ ! -z ${TMPDIR} ] && [ -e ${TMPDIR} ] && rm -rf ${TMPDIR}
 }
 
@@ -650,5 +740,5 @@ function __nuodb__getpass()
   echo ${pass}
 }
 
-alias nuosummary="nuocmd show domain summary"
-export PATH=$(__nuodb__home)/etc:$PATH
+alias nuosummary="nuomgr show domain summary"
+export PATH=$(__nuodb__home)/etc:$(__nuodb__home)/bin:$PATH

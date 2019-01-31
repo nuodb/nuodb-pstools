@@ -4,7 +4,7 @@ The nuodb.sh file contains a set of wrapper functions that make it easier to exe
 
 The public functions provided by this script are:
 
-* [nuocmd](#nuocmd)
+* [nuomgr](#nuomgr)
 * [nuosql](#nuosql)
 * [nuolist](#nuolist)
 * [nuoschema](#nuoschema)
