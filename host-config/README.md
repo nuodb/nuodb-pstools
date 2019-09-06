@@ -34,25 +34,25 @@ The bash functions (and supporting files) that provide a framework for encryptin
 The functions provided by this bash source are listed below and explained in detail in [etc/profile.d](etc/profile.d) README.md:
 
 * [nuosql](#nuosql)
-* [nuocmd](#nuocmd)
+* [nuomgr](#nuomgr)
 * [nuolist](#nuolist)
 * [nuoschema](#nuoschema)
 * [nuodbuser](#nuodbuser)
 
-#####nuosql
+##### nuosql
 A wrapper around /opt/nuodb/bin/nuosql that uses ~/.nuodb.properties to get arguments for nuosql.  Supports encrypting password in ~/.nuodb.properties and hides password via using a named pipe on invocation for the config file. Supports single line sql statements as last argument on the command line.  Specify which database to use with DBNAME variable.
 
 
-#####nuocmd
+##### nuomgr
 A wrapper around /opt/nuodb/bin/nuodbmgr that uses ~/.nuodb.properties or variables for arguments to nuodbmgr.  --command is generated from arguments passed on command line.  If no arguments passed then interactive mode.  Password can be encrypted and is hidden in invocation of nuodbmgr by using a named pipe for a properties file.
 
-#####nuolist
+##### nuolist
 Some simple queries and formatted output for looking at system table in the database.  Can specify some filtering and ordering arguments to some of the queries.
 
-#####nuoschema
+##### nuoschema
 
 Dumps the database schema for the database.
 
-#####nuodbuser
+##### nuodbuser
 
 List the system user that can start / stop nuoagent process and delete archives or run nuochk.  Typically this is nuodb.
